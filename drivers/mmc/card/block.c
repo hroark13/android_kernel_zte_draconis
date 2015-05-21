@@ -268,7 +268,7 @@ static ssize_t power_ro_lock_store(struct device *dev,
 	return count;
 }
 //yeganlin_20140102,set system device to ro if it was write protected
-#if 1
+#if 0
 #define CMD31_SEND_WRITE_PROT_TYPE 31
 #define ROUNDUP(a, b) (((a) + ((b)-1)) & ~((b)-1))
 static int
@@ -3196,7 +3196,7 @@ static int mmc_blk_probe(struct mmc_card *card)
 	char cap_str[10];
 
 //yeganlin_20140102,set system device to ro if it was write protected
-#if 1
+#if 0
 	int i,j;
 	struct hd_struct *p;
 	unsigned char wp_status_buf[8];
@@ -3236,7 +3236,7 @@ static int mmc_blk_probe(struct mmc_card *card)
 	}
 
 //yeganlin_20140102,set system device to ro if it was write protected
-#if 1
+#if 0
 	if(mmc_card_mmc(card)){
 	    for(i = 1; i < MAX_PARTION_NUMBER; i++){
 	        p = disk_get_part(md->disk, i);
