@@ -1,10 +1,6 @@
 # This is the world regulatory domain
 country 00:
-	(2402 - 2472 @ 40), (3, 20)
-	# Channel 12 - 13.
-	(2457 - 2482 @ 40), (3, 20), PASSIVE-SCAN, NO-IBSS
-	# Channel 14. Only JP enables this and for 802.11b only
-	(2474 - 2494 @ 20), (3, 20), PASSIVE-SCAN, NO-IBSS, NO-OFDM
+	(2402 - 2462 @ 20), (3, 20)
 	# Channel 36 - 48
 	(5170 - 5250 @ 80), (3, 20), PASSIVE-SCAN, NO-IBSS
 	# NB: 5260 MHz - 5700 MHz requies DFS
@@ -50,8 +46,9 @@ country AR:
 	(2402 - 2482 @ 40), (N/A, 20)
 	(5170 - 5250 @ 80), (3, 17)
 	(5250 - 5330 @ 80), (3, 24), DFS
-	(5490 - 5710 @ 80), (3, 24), DFS
-	(5735 - 5835 @ 80), (3, 30)
+	(5490 - 5600 @ 80), (3, 24), DFS
+	(5650 - 5710 @ 40), (3, 24), DFS
+        (5735 - 5835 @ 80), (3, 30)
 
 country AS:
 	(2402 - 2472 @ 40), (N/A, 30)
@@ -423,8 +420,8 @@ country HU: DFS-ETSI
 
 country ID:
 	# ref: http://www.postel.go.id/content/ID/regulasi/standardisasi/kepdir/bwa%205,8%20ghz.pdf
-	(2402 - 2482 @ 20), (N/A, 30)
-	(5735 - 5815 @ 20), (N/A, 30)
+	(2402 - 2482 @ 40), (N/A, 20)
+	(5735 - 5815 @ 20), (N/A, 23)
 
 country IE: DFS-ETSI
 	(2402 - 2482 @ 40), (N/A, 20)
@@ -631,7 +628,7 @@ country MY:
 	(5735 - 5835 @ 80), (N/A, 30)
 
 country MX:
-	(2402 - 2472 @ 40), (3, 27)
+	(2402 - 2482 @ 40), (3, 27)
 	(5170 - 5250 @ 80), (3, 17)
 	(5250 - 5330 @ 80), (3, 24), DFS
 	(5490 - 5710 @ 80), (3, 24), DFS
