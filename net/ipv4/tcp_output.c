@@ -33,22 +33,12 @@
  *		J Hadi Salim	:	ECN support
  *
  */
-/* ========================================================================================
-when 		who 	   what, where, why 							comment tag
--------- 	----	   -----------------------------				----------------------
-2013-01-16   lichuan   add TCP socket debug                     ZTE_LC_TCP_DEBUG
-2013-05-09   lichuan   optimize TCP socket debug                     ZTE_LC_IP_DEBUG
-==========================================================================================*/
 
 #include <net/tcp.h>
 
 #include <linux/compiler.h>
 #include <linux/gfp.h>
 #include <linux/module.h>
-/*ZTE_LC_TCP_DEBUG, 20130116 start*/
-#include <linux/debugfs.h>
-#include <linux/inet.h>
-/*ZTE_LC_TCP_DEBUG, 20130116 end*/
 
 /* People can turn this off for buggy TCP's found in printers etc. */
 int sysctl_tcp_retrans_collapse __read_mostly = 1;
@@ -74,47 +64,11 @@ int sysctl_tcp_cookie_size __read_mostly = 0; /* TCP_COOKIE_MAX */
 EXPORT_SYMBOL_GPL(sysctl_tcp_cookie_size);
 
 
-/*ZTE_LC_TCP_DEBUG, 20130116 start*/
-/*1 TCP, 2 IP, 3 TCP&IP*/
-int tcp_socket_debugfs = 0;
-/*ZTE_LC_TCP_DEBUG, 20130116 end*/
 /* Account for new data that has been sent to the network. */
 static void tcp_event_new_data_sent(struct sock *sk, const struct sk_buff *skb)
 {
 	struct tcp_sock *tp = tcp_sk(sk);
 	unsigned int prior_packets = tp->packets_out;
-
-/*ZTE_LC_TCP_DEBUG, 20130116 start*/
-/*ZTE_LC_IP_DEBUG, 20130509 start*/
-//	if (tcp_socket_debugfs)
-if (tcp_socket_debugfs & 0x00000001)
-/*ZTE_LC_IP_DEBUG, 20130509 end*/		
-	{
-	    struct inet_sock *inet = inet_sk(sk);
-	    char stmp[50],dtmp[50];
-	
-           if (skb->len)
-	    {
-	         if (AF_INET == sk->sk_family
-#if defined(CONFIG_IPV6) || defined(CONFIG_IPV6_MODULE)	
-		  ||( (AF_INET6 == sk->sk_family)&&( IPV6_ADDR_MAPPED == ipv6_addr_type(& (inet->pinet6->daddr) )))
-#endif	
-		  )
-		  {		
-/*ZTE_LC_IP_DEBUG, 20130509 start*/
-                    if (strcmp(inet_ntop(AF_INET, &(inet->inet_saddr), stmp, 50), "127.0.0.1"))
-/*ZTE_LC_IP_DEBUG, 20130509 end*/			  
-		       pr_info("[TCP] Tx D_len = %d ,Gpid:%d (%s)  (%s:%d -> %s:%d)\n", skb->len, current->group_leader->pid, current->group_leader->comm,
-				       inet_ntop(AF_INET, &(inet->inet_saddr), stmp, 50), ntohs(inet->inet_sport),
-				       inet_ntop(AF_INET, &(inet->inet_daddr), dtmp, 50), ntohs(inet->inet_dport));
-		  }
-		  else
-		  {
-	              pr_info("[TCP] Tx AF = %d \n", sk->sk_family);
-		  }
-	    }
-	}
-/*ZTE_LC_TCP_DEBUG, 20130116 end*/
 
 	tcp_advance_send_head(sk, skb);
 	tp->snd_nxt = TCP_SKB_CB(skb)->end_seq;
@@ -352,35 +306,6 @@ static inline void TCP_ECN_send_synack(const struct tcp_sock *tp, struct sk_buff
 static inline void TCP_ECN_send_syn(struct sock *sk, struct sk_buff *skb)
 {
 	struct tcp_sock *tp = tcp_sk(sk);
-
-/*ZTE_LC_TCP_DEBUG, 20130116 start*/
-/*ZTE_LC_IP_DEBUG, 20130509 start*/
-//	if (tcp_socket_debugfs)
-if (tcp_socket_debugfs & 0x00000001)
-/*ZTE_LC_IP_DEBUG, 20130509 end*/
-       {
-           struct inet_sock *inet = inet_sk(sk);
-           char stmp[50],dtmp[50];
-	
-           if (AF_INET == sk->sk_family
-#if defined(CONFIG_IPV6) || defined(CONFIG_IPV6_MODULE)	
-	     ||( (AF_INET6 == sk->sk_family)&&( IPV6_ADDR_MAPPED == ipv6_addr_type(& (inet->pinet6->daddr) )))
-#endif	
-           )
-           {
-/*ZTE_LC_IP_DEBUG, 20130509 start*/
-               if (strcmp(inet_ntop(AF_INET, &(inet->inet_saddr), stmp, 50), "127.0.0.1"))
-/*ZTE_LC_IP_DEBUG, 20130509 end*/           
-               pr_info("[TCP]  CONN REQ  Gpid:%d (%s)  (%s:%d -> %s:%d)\n",  current->group_leader->pid, current->group_leader->comm,
-	   	               inet_ntop(AF_INET, &(inet->inet_saddr), stmp, 50), ntohs(inet->inet_sport),
-	   	               inet_ntop(AF_INET, &(inet->inet_daddr), dtmp, 50), ntohs(inet->inet_dport));	 
-           }
-           else 
-           {
-               pr_info("[TCP] AF = %d \n", sk->sk_family);
-           }
-       }
-/*ZTE_LC_TCP_DEBUG, 20130116 end*/
 
 	tp->ecn_flags = 0;
 	if (sysctl_tcp_ecn == 1) {
@@ -2407,35 +2332,6 @@ void tcp_send_fin(struct sock *sk)
 	struct sk_buff *skb = tcp_write_queue_tail(sk);
 	int mss_now;
 
-/*ZTE_LC_TCP_DEBUG, 20130116 start*/
-/*ZTE_LC_IP_DEBUG, 20130509 start*/
-//	if (tcp_socket_debugfs)
-if (tcp_socket_debugfs & 0x00000001)
-/*ZTE_LC_IP_DEBUG, 20130509 end*/
-       {
-           struct inet_sock *inet = inet_sk(sk);
-           char stmp[50],dtmp[50];
-	
-           if (AF_INET == sk->sk_family
-#if defined(CONFIG_IPV6) || defined(CONFIG_IPV6_MODULE)	
-	     ||( (AF_INET6 == sk->sk_family)&&( IPV6_ADDR_MAPPED == ipv6_addr_type(& (inet->pinet6->daddr) )))
-#endif	
-           )
-           {
-/*ZTE_LC_IP_DEBUG, 20130509 start*/
-               if (strcmp(inet_ntop(AF_INET, &(inet->inet_saddr), stmp, 50), "127.0.0.1"))
-/*ZTE_LC_IP_DEBUG, 20130509 end*/           
-               pr_info("[TCP]  DISCONN  Gpid:%d (%s)  (%s:%d -> %s:%d)\n",  current->group_leader->pid, current->group_leader->comm,
-	   	      inet_ntop(AF_INET, &(inet->inet_saddr), stmp, 50), ntohs(inet->inet_sport),
-	   	      inet_ntop(AF_INET, &(inet->inet_daddr), dtmp, 50), ntohs(inet->inet_dport));	 
-           }
-           else 
-           {
-               pr_info("[TCP] DISCONN AF = %d \n", sk->sk_family);	 
-           }
-       }
-/*ZTE_LC_TCP_DEBUG, 20130116 end*/
-
 	/* Optimization, tack on the FIN if we have a queue of
 	 * unsent frames.  But be careful about outgoing SACKS
 	 * and IP options.
@@ -2979,60 +2875,3 @@ void tcp_send_probe0(struct sock *sk)
 					  TCP_RTO_MAX);
 	}
 }
-
-/*ZTE_LC_TCP_DEBUG, 20130116 start*/
-#if defined(CONFIG_DEBUG_FS)
-static int tcp_debug_get(void *data, u64 *val)
-{
-	unsigned int result = tcp_socket_debugfs;
-	
-	if (result)
-/*ZTE_LC_IP_DEBUG, 20130509 start*/		
-//		*val = 1;
-             *val = (u64) result;
-/*ZTE_LC_IP_DEBUG, 20130509 end*/	
-	else
-		*val = 0;
-
-	pr_info("[TCP]  get enable_debug = %d ",  tcp_socket_debugfs);
-	
-	return 0;
-}
-
-static int tcp_debug_enable_set(void *data, u64 val)
-{
-       pr_info("[TCP]  set enable_debug = %d ",  (int)val);
-	tcp_socket_debugfs = (int) val;
-	return 0;
-}
-
-DEFINE_SIMPLE_ATTRIBUTE(tcp_enable_debug_fops, tcp_debug_get,
-						tcp_debug_enable_set, "%llu\n");
-
-
-static void tcp_output_debugfs_init(void)
-{
-       struct dentry *tcp_ctrl_dent;
-       struct dentry *tcp_ctrl_dfile;
-
-	tcp_ctrl_dent = debugfs_create_dir("tcp_output_debug", 0);
-	if (IS_ERR(tcp_ctrl_dent))
-		return;
-
-       tcp_ctrl_dfile = debugfs_create_file("enable_debug", 0644, tcp_ctrl_dent, 0, &tcp_enable_debug_fops);
-      	if (!tcp_ctrl_dfile || IS_ERR(tcp_ctrl_dfile))
-		debugfs_remove(tcp_ctrl_dent);
-}
-#else
-static void tcp_output_debugfs_init(void) { }
-#endif
-
-static __init int tcp_debugfs_init(void)
-{
-    tcp_output_debugfs_init();
-
-    return 0;
-}
-
-fs_initcall(tcp_debugfs_init);
-/*ZTE_LC_TCP_DEBUG, 20130116 end*/
