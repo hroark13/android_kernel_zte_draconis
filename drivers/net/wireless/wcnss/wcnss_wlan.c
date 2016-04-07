@@ -42,6 +42,8 @@
 #include <mach/subsystem_restart.h>
 #include <mach/subsystem_notif.h>
 
+#include <asm/system_info.h>
+
 #ifdef CONFIG_WCNSS_MEM_PRE_ALLOC
 #include "wcnss_prealloc.h"
 #endif
@@ -129,10 +131,10 @@ static DEFINE_SPINLOCK(reg_spinlock);
 #define WCNSS_TSTBUS_CTRL_WRFIFO	(0x04 << 1)
 #define WCNSS_TSTBUS_CTRL_RDFIFO	(0x05 << 1)
 #define WCNSS_TSTBUS_CTRL_CTRL		(0x07 << 1)
-#define WCNSS_TSTBUS_CTRL_AXIM_CFG0	(0x00 << 8)
-#define WCNSS_TSTBUS_CTRL_AXIM_CFG1	(0x01 << 8)
-#define WCNSS_TSTBUS_CTRL_CTRL_CFG0	(0x00 << 28)
-#define WCNSS_TSTBUS_CTRL_CTRL_CFG1	(0x01 << 28)
+#define WCNSS_TSTBUS_CTRL_AXIM_CFG0	(0x00 << 6)
+#define WCNSS_TSTBUS_CTRL_AXIM_CFG1	(0x01 << 6)
+#define WCNSS_TSTBUS_CTRL_CTRL_CFG0	(0x00 << 12)
+#define WCNSS_TSTBUS_CTRL_CTRL_CFG1	(0x01 << 12)
 
 #define MSM_PRONTO_CCPU_BASE			0xfb205050
 #define CCU_PRONTO_INVALID_ADDR_OFFSET		0x08
@@ -185,7 +187,6 @@ static DEFINE_SPINLOCK(reg_spinlock);
 #define WCNSS_USR_CTRL_MSG_START  0x00000000
 #define WCNSS_USR_SERIAL_NUM      (WCNSS_USR_CTRL_MSG_START + 1)
 #define WCNSS_USR_HAS_CAL_DATA    (WCNSS_USR_CTRL_MSG_START + 2)
-#define WCNSS_USR_WLAN_MAC_ADDR   (WCNSS_USR_CTRL_MSG_START + 3)
 
 #define MAC_ADDRESS_STR "%02x:%02x:%02x:%02x:%02x:%02x"
 
@@ -419,6 +420,7 @@ static struct {
 	u16 unsafe_ch_list[WCNSS_MAX_CH_NUM];
 	void *wcnss_notif_hdle;
 	u8 is_shutdown;
+	const char *nv_file_name;
 } *penv = NULL;
 
 static ssize_t wcnss_wlan_macaddr_store(struct device *dev,
@@ -956,7 +958,6 @@ static void wcnss_smd_notify_event(void *data, unsigned int event)
 				WCNSS_CTRL_CHANNEL);
 		schedule_work(&penv->wcnssctrl_version_work);
 		schedule_work(&penv->wcnss_pm_config_work);
-
 		break;
 
 	case SMD_EVENT_CLOSE:
@@ -1417,6 +1418,14 @@ int wcnss_get_wlan_unsafe_channel(u16 *unsafe_ch_list, u16 buffer_size,
 }
 EXPORT_SYMBOL(wcnss_get_wlan_unsafe_channel);
 
+const char *wcnss_get_nv_file_name(void)
+{
+	if (penv && penv->nv_file_name && strlen(penv->nv_file_name) > 0)
+		return penv->nv_file_name;
+	return NULL;
+}
+EXPORT_SYMBOL(wcnss_get_nv_file_name);
+
 static int wcnss_smd_tx(void *data, int len)
 {
 	int ret = 0;
@@ -1811,52 +1820,6 @@ static void wcnss_send_version_req(struct work_struct *worker)
 	return;
 }
 
-static void wcnss_send_pm_config(struct work_struct *worker)
-{
-	struct smd_msg_hdr *hdr;
-	unsigned char *msg = NULL;
-	int rc, prop_len;
-	u32 *payload;
-
-	if (!of_find_property(penv->pdev->dev.of_node,
-				"qcom,wcnss-pm", &prop_len))
-		return;
-
-	msg = kmalloc((sizeof(struct smd_msg_hdr) + prop_len), GFP_KERNEL);
-
-	if (NULL == msg) {
-		pr_err("wcnss: %s: failed to allocate memory\n", __func__);
-		return;
-	}
-
-	payload = (u32 *)(msg + sizeof(struct smd_msg_hdr));
-
-	prop_len /= sizeof(int);
-
-	rc = of_property_read_u32_array(penv->pdev->dev.of_node,
-			"qcom,wcnss-pm", payload, prop_len);
-	if (rc < 0) {
-		pr_err("wcnss: property read failed\n");
-		kfree(msg);
-		return;
-	}
-
-	pr_debug("%s:size=%d: <%d, %d, %d, %d, %d>\n", __func__,
-			prop_len, *payload, *(payload+1), *(payload+2),
-			*(payload+3), *(payload+4));
-
-	hdr = (struct smd_msg_hdr *)msg;
-	hdr->msg_type = WCNSS_PM_CONFIG_REQ;
-	hdr->msg_len = sizeof(struct smd_msg_hdr) + prop_len;
-
-	rc = wcnss_smd_tx(msg, hdr->msg_len);
-	if (rc < 0)
-		pr_err("wcnss: smd tx failed\n");
-
-	kfree(msg);
-	return;
-}
-
 static DECLARE_RWSEM(wcnss_pm_sem);
 
 static void wcnss_nvbin_dnld(void)
@@ -1872,14 +1835,17 @@ static void wcnss_nvbin_dnld(void)
 	unsigned int nv_blob_size = 0;
 	const struct firmware *nv = NULL;
 	struct device *dev = &penv->pdev->dev;
+	const char *nv_file_name = (penv->nv_file_name ?
+					penv->nv_file_name : NVBIN_FILE);
 
 	down_read(&wcnss_pm_sem);
 
-	ret = request_firmware(&nv, NVBIN_FILE, dev);
+	pr_info("wcnss: NV file name = %s\n", nv_file_name);
+	ret = request_firmware(&nv, nv_file_name, dev);
 
 	if (ret || !nv || !nv->data || !nv->size) {
 		pr_err("wcnss: %s: request_firmware failed for %s\n",
-			__func__, NVBIN_FILE);
+			__func__, nv_file_name);
 		goto out;
 	}
 
@@ -2100,6 +2066,46 @@ nv_download:
 	return;
 }
 
+static void wcnss_send_pm_config(struct work_struct *worker)
+{
+	struct smd_msg_hdr *hdr;
+	unsigned char *msg = NULL;
+	int rc, prop_len;
+	u32 *payload;
+
+	if (!of_find_property(penv->pdev->dev.of_node,
+				"qcom,cnss-pm", &prop_len))
+		return ;
+
+	msg = kmalloc((sizeof(struct smd_msg_hdr) + prop_len), GFP_KERNEL);
+	if (NULL == msg) {
+		pr_err("wcnss: %s: failed to get memory\n", __func__);
+		return;
+	}
+
+	payload = (u32 *)(msg+sizeof(struct smd_msg_hdr));
+	rc = of_property_read_u32_array(penv->pdev->dev.of_node,
+		"qcom,cnss-pm", payload, prop_len >> 2);
+
+	if (rc < 0)
+		pr_err("wcnss: property read failed\n");
+
+	pr_info("wcnss_send_pm_config, size=%d, <%d, %d, %d, %d, %d>\n",
+		prop_len, *payload, *(payload + 1), *(payload + 2),
+		*(payload + 3), *(payload + 4));
+
+	hdr = (struct smd_msg_hdr *)msg;
+	hdr->msg_type = WCNSS_PM_CONFIG_REQ;
+	hdr->msg_len = sizeof(struct smd_msg_hdr) + prop_len;
+
+	rc = wcnss_smd_tx(msg, hdr->msg_len);
+	if (rc < 0)
+		pr_err("wcnss: smd tx failed\n");
+
+	kfree(msg);
+}
+
+
 static int wcnss_pm_notify(struct notifier_block *b,
 			unsigned long event, void *p)
 {
@@ -2153,16 +2159,6 @@ void process_usr_ctrl_cmd(u8 *buf, size_t len)
 			pr_err("%s: Invalid data for cal %d\n", __func__,
 				buf[2]);
 		has_calibrated_data = buf[2];
-		break;
-
-	case WCNSS_USR_WLAN_MAC_ADDR:
-		memcpy(&penv->wlan_nv_macAddr,  &buf[2],
-				sizeof(penv->wlan_nv_macAddr));
-
-		pr_debug("%s: MAC Addr:" MAC_ADDRESS_STR "\n", __func__,
-			penv->wlan_nv_macAddr[0], penv->wlan_nv_macAddr[1],
-			penv->wlan_nv_macAddr[2], penv->wlan_nv_macAddr[3],
-			penv->wlan_nv_macAddr[4], penv->wlan_nv_macAddr[5]);
 		break;
 
 	default:
@@ -2226,6 +2222,8 @@ wcnss_trigger_config(struct platform_device *pdev)
 		return 0;
 	penv->triggered = 1;
 
+	penv->nv_file_name = of_get_property(pdev->dev.of_node,
+						"qcom,nv_file", NULL);
 	/* initialize the WCNSS device configuration */
 	pdata = pdev->dev.platform_data;
 	if (WCNSS_CONFIG_UNSPECIFIED == has_48mhz_xo) {
@@ -2291,8 +2289,8 @@ wcnss_trigger_config(struct platform_device *pdev)
 	}
 	INIT_WORK(&penv->wcnssctrl_rx_work, wcnssctrl_rx_handler);
 	INIT_WORK(&penv->wcnssctrl_version_work, wcnss_send_version_req);
-	INIT_WORK(&penv->wcnss_pm_config_work, wcnss_send_pm_config);
 	INIT_WORK(&penv->wcnssctrl_nvbin_dnld_work, wcnss_nvbin_dnld_main);
+	INIT_WORK(&penv->wcnss_pm_config_work, wcnss_send_pm_config);
 
 	wake_lock_init(&penv->wcnss_wake_lock, WAKE_LOCK_SUSPEND, "wcnss");
 
@@ -2670,6 +2668,9 @@ wcnss_wlan_probe(struct platform_device *pdev)
 	mutex_init(&penv->ctrl_lock);
 	mutex_init(&penv->vbat_monitor_mutex);
 	init_waitqueue_head(&penv->read_wait);
+
+	/* populate serial_number during init */
+	penv->serial_number = system_serial_low;
 
 	/* Since we were built into the kernel we'll be called as part
 	 * of kernel initialization.  We don't know if userspace

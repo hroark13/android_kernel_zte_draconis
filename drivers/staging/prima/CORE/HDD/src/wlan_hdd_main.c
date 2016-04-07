@@ -222,6 +222,7 @@ static void hdd_set_multicast_list(struct net_device *dev);
 void hdd_wlan_initial_scan(hdd_adapter_t *pAdapter);
 
 extern int hdd_setBand_helper(struct net_device *dev, tANI_U8* ptr);
+extern int zte_wifi_get_mac_addr(unsigned char *addr);
 
 #if  defined (WLAN_FEATURE_VOWIFI_11R) || defined (FEATURE_WLAN_CCX) || defined(FEATURE_WLAN_LFR)
 void hdd_getBand_helper(hdd_context_t *pHddCtx, int *pBand);
@@ -4958,6 +4959,7 @@ VOS_STATUS hdd_request_firmware(char *pfileName,v_VOID_t *pCtx,v_VOID_t **ppfw_d
    int status;
    VOS_STATUS retval = VOS_STATUS_SUCCESS;
    hdd_context_t *pHddCtx = (hdd_context_t*)pCtx;
+   const char* pdtFileName = NULL;
    ENTER();
 
    if( (!strcmp(WLAN_FW_FILE, pfileName)) ) {
@@ -4978,20 +4980,20 @@ VOS_STATUS hdd_request_firmware(char *pfileName,v_VOID_t *pCtx,v_VOID_t **ppfw_d
        }
    }
    else if(!strcmp(WLAN_NV_FILE, pfileName)) {
-
-       status = request_firmware(&pHddCtx->nv, pfileName, pHddCtx->parent_dev);
-
+       pdtFileName = wcnss_get_nv_file_name();
+       status = request_firmware(&pHddCtx->nv,
+                                 pdtFileName ? pdtFileName : pfileName,
+                                 pHddCtx->parent_dev);
        if(status || !pHddCtx->nv || !pHddCtx->nv->data) {
            hddLog(VOS_TRACE_LEVEL_FATAL, "%s: nv %s download failed",
-                  __func__, pfileName);
+                  __func__, pdtFileName ? pdtFileName : pfileName);
            retval = VOS_STATUS_E_FAILURE;
        }
-
        else {
          *ppfw_data = (v_VOID_t *)pHddCtx->nv->data;
          *pSize = pHddCtx->nv->size;
-          hddLog(VOS_TRACE_LEVEL_INFO, "%s: nv file size = %d",
-                 __func__, *pSize);
+          hddLog(VOS_TRACE_LEVEL_ERROR, "%s: nv file %s size = %d",
+                 __func__, pdtFileName ? pdtFileName : pfileName, *pSize);
        }
    }
 #ifdef WLAN_NV_OTA_UPGRADE /* Motorola OTA changes */
@@ -8220,7 +8222,10 @@ int hdd_wlan_startup(struct device *dev )
    }
 
    // Get mac addr from platform driver
-   ret = wcnss_get_wlan_mac_address((char*)&mac_addr.bytes);
+   //ret = wcnss_get_wlan_mac_address((char*)&mac_addr.bytes);
+
+   // Get mac addr from ZTE driver
+   ret = zte_wifi_get_mac_addr((unsigned char*)&mac_addr);
 
    if ((0 == ret) && (!vos_is_macaddr_zero(&mac_addr)))
    {
@@ -9502,6 +9507,33 @@ static VOS_STATUS wlan_hdd_init_channels(hdd_context_t *pHddCtx)
 VOS_STATUS hdd_issta_p2p_clientconnected(hdd_context_t *pHddCtx)
 {
     return sme_isSta_p2p_clientConnected(pHddCtx->hHal);
+}
+
+VOS_STATUS wlan_hdd_cancel_remain_on_channel(hdd_context_t *pHddCtx)
+{
+    hdd_adapter_t *pAdapter;
+    hdd_adapter_list_node_t *pAdapterNode = NULL, *pNext = NULL;
+    VOS_STATUS vosStatus;
+
+    vosStatus = hdd_get_front_adapter ( pHddCtx, &pAdapterNode );
+    while (NULL != pAdapterNode && VOS_STATUS_E_EMPTY != vosStatus)
+    {
+        pAdapter = pAdapterNode->pAdapter;
+        if (NULL != pAdapter)
+        {
+            if (WLAN_HDD_P2P_DEVICE == pAdapter->device_mode ||
+                WLAN_HDD_P2P_CLIENT == pAdapter->device_mode ||
+                WLAN_HDD_P2P_GO == pAdapter->device_mode)
+            {
+                hddLog(LOG1, FL("abort ROC deviceMode: %d"),
+                                 pAdapter->device_mode);
+                wlan_hdd_cancel_existing_remain_on_channel(pAdapter);
+            }
+        }
+        vosStatus = hdd_get_next_adapter ( pHddCtx, pAdapterNode, &pNext );
+        pAdapterNode = pNext;
+    }
+    return VOS_STATUS_SUCCESS;
 }
 
 //Register the module init/exit functions
